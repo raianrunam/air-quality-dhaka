@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dhaka Air Quality Monitor</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #1e3a5f, #0ea5e9);
+            padding: 20px 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .header h1 { font-size: 24px; font-weight: 700; }
+        .header p { font-size: 13px; opacity: 0.8; }
+        .header-icon { font-size: 40px; }
+
+        /* Summary Cards */
+        .cards {
+            display: flex;
+            gap: 20px;
+            padding: 25px 30px;
+            flex-wrap: wrap;
+        }
+        .card {
+            flex: 1;
+            min-width: 180px;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .card-high   { background: linear-gradient(135deg, #dc2626, #991b1b); }
+        .card-medium { background: linear-gradient(135deg, #d97706, #92400e); }
+        .card-low    { background: linear-gradient(135deg, #16a34a, #14532d); }
+        .card-total  { background: linear-gradient(135deg, #2563eb, #1e3a8a); }
+        .card h2 { font-size: 42px; font-weight: 800; }
+        .card p  { font-size: 14px; opacity: 0.9; margin-top: 5px; }
+
+        /* Main content */
+        .main {
+            display: flex;
+            gap: 20px;
+            padding: 0 30px 30px;
+            flex-wrap: wrap;
+        }
+
+        /* Map */
+        .map-container {
+            flex: 2;
+            min-width: 300px;
+            background: #1e293b;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .map-container h3 {
+            padding: 15px 20px;
+            font-size: 16px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+        }
+        #map { height: 420px; width: 100%; }
+
+        /* Table */
+        .table-container {
+            flex: 1;
+            min-width: 280px;
+            background: #1e293b;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .table-container h3 {
+            padding: 15px 20px;
+            font-size: 16px;
+            border-bottom: 1px solid #334155;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            background: #334155;
+            padding: 10px 15px;
+            font-size: 12px;
+            text-align: left;
+            color: #94a3b8;
+        }
+        td { padding: 10px 15px; font-size: 13px; border-bottom: 1px solid #1e293b; }
+        tr:hover { background: #334155; }
+        .badge {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-high   { background: #dc2626; }
+        .badge-medium { background: #d97706; }
+        .badge-low    { background: #16a34a; }
+
+        /* Charts */
+        .charts {
+            display: flex;
+            gap: 20px;
+            padding: 0 30px 30px;
+            flex-wrap: wrap;
+        }
+        .chart-box {
+            flex: 1;
+            min-width: 280px;
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .chart-box h3 { font-size: 15px; margin-bottom: 15px; color: #94a3b8; }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+            font-size: 13px;
+            border-top: 1px solid #1e293b;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <div class="header-icon">🌫️</div>
+    <div>
+        <h1>Dhaka Air Quality Monitoring Dashboard</h1>
+        <p>AI-Powered Carbon Emission Hotspot Detection | Real-time Data from Firebase</p>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="cards">
+    <div class="card card-high">
+        <h2 id="highCount">-</h2>
+        <p>🔴 High Risk Areas</p>
+    </div>
+    <div class="card card-medium">
+        <h2 id="mediumCount">-</h2>
+        <p>🟡 Medium Risk Areas</p>
+    </div>
+    <div class="card card-low">
+        <h2 id="lowCount">-</h2>
+        <p>🟢 Low Risk Areas</p>
+    </div>
+    <div class="card card-total">
+        <h2 id="totalCount">-</h2>
+        <p>📍 Total Areas Monitored</p>
+    </div>
+</div>
+
+<!-- Map + Table -->
+<div class="main">
+    <div class="map-container">
+        <h3>🗺️ Emission Hotspot Map — Dhaka</h3>
+        <div id="map"></div>
+    </div>
+    <div class="table-container">
+        <h3>📋 Area Risk Classification</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Area</th>
+                    <th>AQI</th>
+                    <th>PM2.5</th>
+                    <th>Risk</th>
+                </tr>
+            </thead>
+            <tbody id="areaTable">
+                <tr><td colspan="4" style="text-align:center; color:#64748b;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="charts">
+    <div class="chart-box">
+        <h3>📊 AQI by Area</h3>
+        <canvas id="aqiChart"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>🥧 Risk Zone Distribution</h3>
+        <canvas id="riskChart"></canvas>
+    </div>
+    <div class="chart-box">
+        <h3>💨 PM2.5 vs PM10</h3>
+        <canvas id="pmChart"></canvas>
+    </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+    <p>AI-Powered Air Quality Monitoring System | Dhaka Carbon Emission Hotspots | Data stored in Firebase Firestore</p>
+</div>
+
+<script>
+// Coordinates for each area in Dhaka
+const areaCoords = {
+    "Tannery_mor":   [23.7215, 90.3850],
+    "Staff Quarter": [23.7650, 90.3890],
+    "Tejgao":        [23.7579, 90.3894],
+    "DMD LAke":      [23.7808, 90.4226],
+    "Kawran Bazar":  [23.7516, 90.3930],
+    "KEraniganj":    [23.6978, 90.3717],
+    "Gulshan":       [23.7808, 90.4147],
+    "Ramna":         [23.7340, 90.4070],
+    "Aftabnagar":    [23.7559, 90.4351]
+};
+
+const riskColors = {
+    "High Risk":   "#dc2626",
+    "Medium Risk": "#d97706",
+    "Low Risk":    "#16a34a"
+};
+
+// Initialize Mapbox via Leaflet
+const map = L.map("map").setView([23.7400, 90.3900], 12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap"
+}).addTo(map);
+
+// Fetch data from Flask API
+fetch("/api/areas")
+    .then(res => res.json())
+    .then(areas => {
+        // Sort by AQI descending
+        areas.sort((a, b) => b.AQI - a.AQI);
+
+        // Add map markers
+        areas.forEach(area => {
+            const coords = areaCoords[area.area];
+            if (!coords) return;
+            const color = riskColors[area.Risk_Zone] || "#888";
+            const circle = L.circleMarker(coords, {
+                radius: 18,
+                fillColor: color,
+                color: "#fff",
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.85
+            }).addTo(map);
+            circle.bindPopup(`
+                <b>${area.area}</b><br>
+                Risk: <b style="color:${color}">${area.Risk_Zone}</b><br>
+                AQI: <b>${area.AQI}</b><br>
+                PM2.5: ${area.PM25} | PM10: ${area.PM10}<br>
+                NO2: ${area.NO2} | SO2: ${area.SO2}<br>
+                CO: ${area.CO}
+            `);
+        });
+
+        // Fill table
+        const tbody = document.getElementById("areaTable");
+        tbody.innerHTML = "";
+        areas.forEach(area => {
+            const riskClass = area.Risk_Zone === "High Risk" ? "badge-high" :
+                              area.Risk_Zone === "Medium Risk" ? "badge-medium" : "badge-low";
+            tbody.innerHTML += `
+                <tr>
+                    <td>${area.area}</td>
+                    <td>${area.AQI}</td>
+                    <td>${area.PM25}</td>
+                    <td><span class="badge ${riskClass}">${area.Risk_Zone}</span></td>
+                </tr>`;
+        });
+
+        // AQI Bar Chart
+        const aqiCtx = document.getElementById("aqiChart").getContext("2d");
+        new Chart(aqiCtx, {
+            type: "bar",
+            data: {
+                labels: areas.map(a => a.area),
+                datasets: [{
+                    label: "AQI",
+                    data: areas.map(a => a.AQI),
+                    backgroundColor: areas.map(a => riskColors[a.Risk_Zone]),
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" } },
+                    x: { ticks: { color: "#94a3b8", maxRotation: 45 }, grid: { display: false } }
+                }
+            }
+        });
+
+        // Risk Donut Chart
+        const riskCtx = document.getElementById("riskChart").getContext("2d");
+        const high   = areas.filter(a => a.Risk_Zone === "High Risk").length;
+        const medium = areas.filter(a => a.Risk_Zone === "Medium Risk").length;
+        const low    = areas.filter(a => a.Risk_Zone === "Low Risk").length;
+        new Chart(riskCtx, {
+            type: "doughnut",
+            data: {
+                labels: ["High Risk", "Medium Risk", "Low Risk"],
+                datasets: [{
+                    data: [high, medium, low],
+                    backgroundColor: ["#dc2626", "#d97706", "#16a34a"],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { labels: { color: "#94a3b8" } }
+                }
+            }
+        });
+
+        // PM2.5 vs PM10 Chart
+        const pmCtx = document.getElementById("pmChart").getContext("2d");
+        new Chart(pmCtx, {
+            type: "bar",
+            data: {
+                labels: areas.map(a => a.area),
+                datasets: [
+                    {
+                        label: "PM2.5",
+                        data: areas.map(a => a.PM25),
+                        backgroundColor: "#f97316",
+                        borderRadius: 4
+                    },
+                    {
+                        label: "PM10",
+                        data: areas.map(a => a.PM10),
+                        backgroundColor: "#0ea5e9",
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                plugins: { legend: { labels: { color: "#94a3b8" } } },
+                scales: {
+                    y: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" } },
+                    x: { ticks: { color: "#94a3b8", maxRotation: 45 }, grid: { display: false } }
+                }
+            }
+        });
+    });
+
+// Load summary cards
+fetch("/api/summary")
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById("highCount").textContent   = data.high;
+        document.getElementById("mediumCount").textContent = data.medium;
+        document.getElementById("lowCount").textContent    = data.low;
+        document.getElementById("totalCount").textContent  = data.total;
+    });
+</script>
+</body>
+</html>
