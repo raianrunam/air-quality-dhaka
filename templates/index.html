@@ -369,5 +369,269 @@ fetch("/api/summary")
         document.getElementById("totalCount").textContent  = data.total;
     });
 </script>
+
+    <!-- SECTION: CO2/AQI Trend Chart -->
+    <div class="charts" style="padding: 0 30px 30px;">
+        <div class="chart-box" style="flex: 2;">
+            <h3>📈 CO & AQI Trend by Area</h3>
+            <canvas id="trendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- SECTION: Policy Suggestions -->
+    <div style="padding: 0 30px 30px;">
+        <div style="background: #1e293b; border-radius: 12px; padding: 25px;">
+            <h3 style="font-size: 16px; margin-bottom: 20px;">
+                💡 Policy Suggestions Based on AI Risk Classification
+            </h3>
+            <div id="policyCards" style="display: flex; gap: 15px; flex-wrap: wrap;">
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION: Download Report -->
+    <div style="padding: 0 30px 30px;">
+        <div style="background: #1e293b; border-radius: 12px; padding: 25px;">
+            <h3 style="font-size: 16px; margin-bottom: 15px;">
+                📥 Download Report
+            </h3>
+            <p style="color: #94a3b8; font-size: 13px; margin-bottom: 15px;">
+                Download the complete air quality risk zone report for all 9 areas.
+            </p>
+            <button onclick="downloadReport()" style="
+                background: linear-gradient(135deg, #2563eb, #1e3a8a);
+                color: white;
+                border: none;
+                padding: 12px 25px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;">
+                📥 Download CSV Report
+            </button>
+            <button onclick="downloadPolicyReport()" style="
+                background: linear-gradient(135deg, #16a34a, #14532d);
+                color: white;
+                border: none;
+                padding: 12px 25px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                margin-left: 10px;">
+                📄 Download Policy Report
+            </button>
+        </div>
+    </div>
+
+<script>
+// Store areas data globally
+let areasData = [];
+
+// Policy suggestions based on risk zone
+const policyMap = {
+    "High Risk": {
+        color: "#dc2626",
+        icon: "🔴",
+        suggestions: [
+            "Immediate restriction on heavy vehicles during peak hours",
+            "Deploy air purifiers in public spaces",
+            "Enforce strict industrial emission regulations",
+            "Increase green cover and tree plantation drives",
+            "Install real-time AQI display boards for public awareness"
+        ]
+    },
+    "Medium Risk": {
+        color: "#d97706",
+        icon: "🟡",
+        suggestions: [
+            "Promote public transport and carpooling",
+            "Regular vehicle emission checks",
+            "Encourage use of CNG and electric vehicles",
+            "Monitor industrial activities closely",
+            "Create pedestrian and cycling zones"
+        ]
+    },
+    "Low Risk": {
+        color: "#16a34a",
+        icon: "🟢",
+        suggestions: [
+            "Maintain current green spaces and parks",
+            "Continue regular air quality monitoring",
+            "Promote awareness campaigns",
+            "Encourage sustainable urban planning",
+            "Use as model zones for other areas"
+        ]
+    }
+};
+
+// Load trend chart and policy cards
+fetch("/api/areas")
+    .then(res => res.json())
+    .then(areas => {
+        areasData = areas;
+        areas.sort((a, b) => b.AQI - a.AQI);
+
+        // Trend Chart - CO and AQI
+        const trendCtx = document.getElementById("trendChart").getContext("2d");
+        new Chart(trendCtx, {
+            type: "line",
+            data: {
+                labels: areas.map(a => a.area),
+                datasets: [
+                    {
+                        label: "AQI",
+                        data: areas.map(a => a.AQI),
+                        borderColor: "#dc2626",
+                        backgroundColor: "rgba(220,38,38,0.1)",
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 6,
+                        pointBackgroundColor: "#dc2626"
+                    },
+                    {
+                        label: "CO",
+                        data: areas.map(a => a.CO),
+                        borderColor: "#0ea5e9",
+                        backgroundColor: "rgba(14,165,233,0.1)",
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 6,
+                        pointBackgroundColor: "#0ea5e9",
+                        yAxisID: "y2"
+                    }
+                ]
+            },
+            options: {
+                plugins: {
+                    legend: { labels: { color: "#94a3b8" } }
+                },
+                scales: {
+                    y: {
+                        ticks: { color: "#94a3b8" },
+                        grid: { color: "#334155" },
+                        title: { display: true, text: "AQI", color: "#94a3b8" }
+                    },
+                    y2: {
+                        position: "right",
+                        ticks: { color: "#94a3b8" },
+                        grid: { display: false },
+                        title: { display: true, text: "CO", color: "#94a3b8" }
+                    },
+                    x: {
+                        ticks: { color: "#94a3b8", maxRotation: 45 },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+
+        // Policy Cards
+        const policyContainer = document.getElementById("policyCards");
+        const riskGroups = {};
+        areas.forEach(area => {
+            if (!riskGroups[area.Risk_Zone]) {
+                riskGroups[area.Risk_Zone] = [];
+            }
+            riskGroups[area.Risk_Zone].push(area.area);
+        });
+
+        Object.keys(policyMap).forEach(risk => {
+            if (riskGroups[risk]) {
+                const policy = policyMap[risk];
+                const card = document.createElement("div");
+                card.style.cssText = `
+                    flex: 1; min-width: 250px;
+                    background: #0f172a;
+                    border-radius: 10px;
+                    padding: 20px;
+                    border-left: 4px solid ${policy.color};
+                `;
+                card.innerHTML = `
+                    <h4 style="color: ${policy.color}; margin-bottom: 8px;">
+                        ${policy.icon} ${risk}
+                    </h4>
+                    <p style="color: #64748b; font-size: 12px; margin-bottom: 12px;">
+                        Areas: ${riskGroups[risk].join(", ")}
+                    </p>
+                    <ul style="padding-left: 15px; color: #94a3b8; font-size: 13px;">
+                        ${policy.suggestions.map(s => 
+                            `<li style="margin-bottom: 6px;">${s}</li>`
+                        ).join("")}
+                    </ul>
+                `;
+                policyContainer.appendChild(card);
+            }
+        });
+    });
+
+// Download CSV Report
+function downloadReport() {
+    if (areasData.length === 0) {
+        alert("Data not loaded yet. Please wait.");
+        return;
+    }
+    
+    const headers = ["Area", "AQI", "PM25", "PM10", "O3", 
+                     "NO2", "SO2", "CO", "Risk_Zone"];
+    const rows = areasData.map(a => [
+        a.area, a.AQI, a.PM25, a.PM10, a.O3,
+        a.NO2, a.SO2, a.CO, a.Risk_Zone
+    ]);
+    
+    let csv = headers.join(",") + "\n";
+    rows.forEach(row => { csv += row.join(",") + "\n"; });
+    
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dhaka_air_quality_report.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Download Policy Report
+function downloadPolicyReport() {
+    if (areasData.length === 0) {
+        alert("Data not loaded yet. Please wait.");
+        return;
+    }
+
+    let report = "DHAKA AIR QUALITY MONITORING SYSTEM\n";
+    report += "AI-Powered Carbon Emission Hotspot Report\n";
+    report += "==========================================\n\n";
+    
+    const riskGroups = {};
+    areasData.forEach(a => {
+        if (!riskGroups[a.Risk_Zone]) riskGroups[a.Risk_Zone] = [];
+        riskGroups[a.Risk_Zone].push(a);
+    });
+
+    Object.keys(policyMap).forEach(risk => {
+        if (riskGroups[risk]) {
+            report += `${risk.toUpperCase()} ZONES\n`;
+            report += "-".repeat(30) + "\n";
+            riskGroups[risk].forEach(a => {
+                report += `Area: ${a.area} | AQI: ${a.AQI} | PM2.5: ${a.PM25}\n`;
+            });
+            report += "\nPolicy Recommendations:\n";
+            policyMap[risk].suggestions.forEach((s, i) => {
+                report += `${i+1}. ${s}\n`;
+            });
+            report += "\n";
+        }
+    });
+
+    const blob = new Blob([report], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dhaka_air_quality_policy_report.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+
 </body>
 </html>
