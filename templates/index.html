@@ -214,18 +214,20 @@
 </div>
 
 <script>
-// Coordinates for each area in Dhaka
+
+// Precise GPS Coordinates for each area
 const areaCoords = {
-    "Tannery_mor":   [23.7215, 90.3850],
-    "Staff Quarter": [23.7650, 90.3890],
-    "Tejgao":        [23.7579, 90.3894],
-    "DMD LAke":      [23.7808, 90.4226],
-    "Kawran Bazar":  [23.7516, 90.3930],
-    "KEraniganj":    [23.6978, 90.3717],
-    "Gulshan":       [23.7808, 90.4147],
-    "Ramna":         [23.7340, 90.4070],
-    "Aftabnagar":    [23.7559, 90.4351]
+    "Tannery_mor":   { lat: 23.7215, lng: 90.3850, radius: 800 },
+    "Staff Quarter": { lat: 23.7650, lng: 90.3890, radius: 700 },
+    "Tejgao":        { lat: 23.7579, lng: 90.3894, radius: 750 },
+    "DMD LAke":      { lat: 23.7808, lng: 90.4226, radius: 600 },
+    "Kawran Bazar":  { lat: 23.7516, lng: 90.3930, radius: 850 },
+    "KEraniganj":    { lat: 23.6978, lng: 90.3717, radius: 1000 },
+    "Gulshan":       { lat: 23.7808, lng: 90.4147, radius: 650 },
+    "Ramna":         { lat: 23.7340, lng: 90.4070, radius: 700 },
+    "Aftabnagar":    { lat: 23.7559, lng: 90.4351, radius: 750 }
 };
+
 
 const riskColors = {
     "High Risk":   "#dc2626",
@@ -251,7 +253,21 @@ fetch("/api/areas")
             const coords = areaCoords[area.area];
             if (!coords) return;
             const color = riskColors[area.Risk_Zone] || "#888";
-            const circle = L.circleMarker(coords, {
+            const coords = areaCoords[area.area];
+            if (!coords) return;
+
+            // Add pollution radius circle
+            L.circle([coords.lat, coords.lng], {
+                radius: coords.radius,
+                fillColor: color,
+                color: color,
+                weight: 1,
+                opacity: 0.4,
+                fillOpacity: 0.15
+            }).addTo(map);
+
+            // Add marker
+            const circle = L.circleMarker([coords.lat, coords.lng], {
                 radius: 18,
                 fillColor: color,
                 color: "#fff",
@@ -259,13 +275,39 @@ fetch("/api/areas")
                 opacity: 1,
                 fillOpacity: 0.85
             }).addTo(map);
+
+            // Add area label
+            L.marker([coords.lat, coords.lng], {
+                icon: L.divIcon({
+                    className: "",
+                    html: `<div style="
+                        background:${color};
+                        color:white;
+                        padding:2px 6px;
+                        border-radius:4px;
+                        font-size:10px;
+                        font-weight:bold;
+                        white-space:nowrap;
+                        margin-top:20px;
+                        box-shadow:0 2px 4px rgba(0,0,0,0.3);">
+                        ${area.area}
+                    </div>`,
+                    iconAnchor: [30, 0]
+                })
+            }).addTo(map);
+
             circle.bindPopup(`
-                <b>${area.area}</b><br>
-                Risk: <b style="color:${color}">${area.Risk_Zone}</b><br>
-                AQI: <b>${area.AQI}</b><br>
-                PM2.5: ${area.PM25} | PM10: ${area.PM10}<br>
-                NO2: ${area.NO2} | SO2: ${area.SO2}<br>
-                CO: ${area.CO}
+                <b style="font-size:14px">${area.area}</b><br>
+                <hr style="margin:4px 0">
+                🎯 Risk Zone: <b style="color:${color}">${area.Risk_Zone}</b><br>
+                📊 AQI: <b>${area.AQI}</b><br>
+                💨 PM2.5: ${area.PM25} µg/m³<br>
+                💨 PM10: ${area.PM10} µg/m³<br>
+                🟤 NO2: ${area.NO2} µg/m³<br>
+                🟡 SO2: ${area.SO2} µg/m³<br>
+                ⚫ CO: ${area.CO} ppm<br>
+                <hr style="margin:4px 0">
+                <small>📍 ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}</small>
             `);
         });
 
