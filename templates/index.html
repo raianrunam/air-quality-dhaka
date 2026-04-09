@@ -2,13 +2,180 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dhaka Air Quality Monitor</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js">
+// AQI Alert System
+function getAQIAlert(aqi) {
+    if (aqi <= 50)       return { cls:"alert-good",      icon:"✅", title:"Air Quality: Good",
+        desc:`Average AQI ${aqi.toFixed(1)} — Air quality is satisfactory. Safe for all activities.` };
+    if (aqi <= 100)      return { cls:"alert-moderate",  icon:"🟡", title:"Air Quality: Moderate",
+        desc:`Average AQI ${aqi.toFixed(1)} — Acceptable quality. Sensitive individuals should limit outdoor exposure.` };
+    if (aqi <= 150)      return { cls:"alert-sensitive", icon:"🟠", title:"⚠️ Unhealthy for Sensitive Groups",
+        desc:`Average AQI ${aqi.toFixed(1)} — Children, elderly and sensitive groups should reduce outdoor activities.` };
+    if (aqi <= 200)      return { cls:"alert-unhealthy", icon:"🔴", title:"🚨 UNHEALTHY — Health Alert Active",
+        desc:`Average AQI ${aqi.toFixed(1)} — Everyone may experience health effects. Avoid prolonged outdoor exposure.` };
+    if (aqi <= 300)      return { cls:"alert-very",      icon:"🟣", title:"🚨 VERY UNHEALTHY — Serious Risk",
+        desc:`Average AQI ${aqi.toFixed(1)} — Health alert! Everyone should avoid outdoor activities.` };
+    return               { cls:"alert-hazardous",        icon:"⚫", title:"☠️ HAZARDOUS — Emergency Conditions",
+        desc:`Average AQI ${aqi.toFixed(1)} — Emergency conditions. Everyone must stay indoors.` };
+}
+
+function updateAlertBanner(areas) {
+    const avgAQI = areas.reduce((sum, a) => sum + a.AQI, 0) / areas.length;
+    const maxAQI = Math.max(...areas.map(a => a.AQI));
+    const worstArea = areas.find(a => a.AQI === maxAQI);
+    const alert = getAQIAlert(avgAQI);
+
+    const banner = document.getElementById("alertBanner");
+    banner.className = "alert-banner " + alert.cls;
+    document.getElementById("alertIcon").textContent = alert.icon;
+    document.getElementById("alertTitle").textContent = alert.title;
+    document.getElementById("alertDesc").textContent =
+        alert.desc + ` | Worst area: ${worstArea.area} (AQI: ${maxAQI.toFixed(1)})`;
+}
+
+
+// WHO Limits
+const whoLimits = {
+    AQI: 50, PM25: 15, PM10: 45,
+    O3: 60, NO2: 10, SO2: 40, CO: 4
+};
+
+// Policy recommendations
+const policyRecommendations = {
+    "High Risk": [
+        "🚗 Restrict heavy vehicles during peak hours (7-10AM, 5-8PM)",
+        "🏭 Enforce strict industrial emission regulations immediately",
+        "😷 Issue public health advisory — wear N95 masks outdoors",
+        "🌳 Emergency tree plantation and green buffer zones",
+        "📊 Install permanent real-time AQI display boards",
+        "🏥 Increase hospital respiratory unit capacity",
+        "⚡ Transition to electric public transport urgently"
+    ],
+    "Medium Risk": [
+        "🚌 Promote public transport and carpooling programs",
+        "🔍 Regular vehicle emission checks and standards enforcement",
+        "⚡ Incentivize CNG and electric vehicle adoption",
+        "🌿 Expand parks and green spaces in the area",
+        "📱 Deploy community AQI monitoring stations",
+        "🏗️ Implement dust control measures at construction sites"
+    ],
+    "Low Risk": [
+        "✅ Maintain current green spaces and water bodies",
+        "📈 Continue regular air quality monitoring",
+        "🌍 Use as model zone for sustainable urban planning",
+        "📢 Run public awareness campaigns",
+        "🔄 Share best practices with higher-risk areas",
+        "📊 Establish as baseline reference for Dhaka AQI"
+    ]
+};
+
+function openAreaModal(area) {
+    const riskColors = {
+        "High Risk": "#dc2626",
+        "Medium Risk": "#d97706",
+        "Low Risk": "#16a34a"
+    };
+    const color = riskColors[area.Risk_Zone] || "#888";
+    const coords = areaCoords[area.area];
+    const lat = coords ? coords.lat.toFixed(4) : "N/A";
+    const lng = coords ? coords.lng.toFixed(4) : "N/A";
+
+    // Header
+    document.getElementById("modalTitle").textContent = area.area;
+    document.getElementById("modalTitle").style.color = color;
+    document.getElementById("modalSubtitle").textContent =
+        `${area.Risk_Zone} | 📍 ${lat}°N, ${lng}°E`;
+
+    // Stats
+    document.getElementById("modalAQI").textContent  = area.AQI;
+    document.getElementById("modalPM25").textContent = area.PM25;
+    document.getElementById("modalPM10").textContent = area.PM10;
+    document.getElementById("modalCO").textContent   = area.CO;
+
+    // Pollutant bars
+    const barsDiv = document.getElementById("modalBars");
+    const pollutants = [
+        { name:"AQI",  val:area.AQI,  limit:50,  max:250 },
+        { name:"PM2.5",val:area.PM25, limit:15,  max:150 },
+        { name:"PM10", val:area.PM10, limit:45,  max:250 },
+        { name:"NO2",  val:area.NO2,  limit:10,  max:50  },
+        { name:"SO2",  val:area.SO2,  limit:40,  max:50  },
+        { name:"CO",   val:area.CO,   limit:4,   max:3   },
+    ];
+    barsDiv.innerHTML = pollutants.map(p => {
+        const pct = Math.min((p.val / p.max) * 100, 100);
+        const barColor = p.val > p.limit ? "#dc2626" : "#16a34a";
+        return `
+        <div class="modal-bar-row">
+            <div class="modal-bar-label">${p.name}</div>
+            <div class="modal-bar-track">
+                <div class="modal-bar-fill"
+                     style="width:${pct}%;background:${barColor}"></div>
+            </div>
+            <div class="modal-bar-val" style="color:${barColor}">${p.val}</div>
+        </div>`;
+    }).join("");
+
+    // WHO comparison
+    const whoDiv = document.getElementById("modalWHO");
+    const whoItems = [
+        { name:"AQI",   val:area.AQI,  limit:50  },
+        { name:"PM2.5", val:area.PM25, limit:15  },
+        { name:"PM10",  val:area.PM10, limit:45  },
+        { name:"NO2",   val:area.NO2,  limit:10  },
+        { name:"SO2",   val:area.SO2,  limit:40  },
+        { name:"CO",    val:area.CO,   limit:4   },
+    ];
+    whoDiv.innerHTML = whoItems.map(w => {
+        const exceeds = w.val > w.limit;
+        const ratio = (w.val / w.limit).toFixed(1);
+        const icon = exceeds ? "🔴" : "🟢";
+        const status = exceeds
+            ? `${ratio}x above WHO limit (${w.limit})`
+            : `Within WHO limit (${w.limit})`;
+        return `<div class="who-compare">
+            <span>${icon} ${w.name}</span>
+            <span style="color:${exceeds?"#f87171":"#86efac"}">${status}</span>
+        </div>`;
+    }).join("");
+
+    // Policy recommendations
+    const policyList = document.getElementById("modalPolicy");
+    const policies = policyRecommendations[area.Risk_Zone] || [];
+    policyList.innerHTML = policies.map(p =>
+        `<li>• ${p}</li>`).join("");
+
+    // Show modal
+    document.getElementById("areaModal").classList.add("active");
+}
+
+function closeModal() {
+    document.getElementById("areaModal").classList.remove("active");
+}
+
+// Close on overlay click
+document.getElementById("areaModal").addEventListener("click", function(e) {
+    if (e.target === this) closeModal();
+});
+
+
+function scrollToSection(id) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+</script>
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -135,7 +302,257 @@
             font-size: 13px;
             border-top: 1px solid #1e293b;
         }
-    </style>
+    
+        /* AQI Alert Banner */
+        .alert-banner {
+            padding: 15px 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 14px;
+            font-weight: 600;
+            border-left: 6px solid;
+            margin: 0;
+        }
+        .alert-good        { background:#14532d; border-color:#16a34a; color:#bbf7d0; }
+        .alert-moderate    { background:#713f12; border-color:#d97706; color:#fef08a; }
+        .alert-sensitive   { background:#7c2d12; border-color:#ea580c; color:#fed7aa; }
+        .alert-unhealthy   { background:#7f1d1d; border-color:#dc2626; color:#fecaca; }
+        .alert-very        { background:#4a1d96; border-color:#7c3aed; color:#ddd6fe; }
+        .alert-hazardous   { background:#1c1917; border-color:#57534e; color:#f5f5f4; }
+        .alert-icon { font-size: 24px; }
+        .alert-content h4  { margin:0; font-size:15px; }
+        .alert-content p   { margin:0; font-weight:400; font-size:13px; opacity:0.9; }
+
+        /* WHO Reference Bar */
+        .who-bar {
+            display: flex;
+            padding: 10px 30px;
+            gap: 8px;
+            background: #1e293b;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .who-bar span { font-size: 11px; color: #94a3b8; margin-right: 5px; }
+        .who-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+
+        /* Area Detail Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 30px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 85vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+            animation: modalIn 0.3s ease;
+        }
+        @keyframes modalIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to   { transform: scale(1);   opacity: 1; }
+        }
+        .modal-close {
+            position: absolute;
+            top: 15px; right: 20px;
+            background: #dc2626;
+            border: none;
+            color: white;
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .modal-header {
+            border-bottom: 2px solid #334155;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .modal-header h2 { font-size: 22px; margin: 0 0 5px 0; }
+        .modal-header p  { color: #94a3b8; margin: 0; font-size: 13px; }
+        .modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .modal-stat {
+            background: #0f172a;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+        .modal-stat h3 { font-size: 28px; margin: 0 0 5px 0; }
+        .modal-stat p  { color: #94a3b8; font-size: 12px; margin: 0; }
+        .modal-section h4 {
+            color: #94a3b8;
+            font-size: 13px;
+            margin: 0 0 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .modal-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .modal-bar-label { width: 60px; font-size: 12px; color: #94a3b8; }
+        .modal-bar-track {
+            flex: 1;
+            background: #334155;
+            border-radius: 4px;
+            height: 8px;
+            overflow: hidden;
+        }
+        .modal-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.8s ease;
+        }
+        .modal-bar-val { font-size: 12px; width: 50px; text-align: right; }
+        .policy-list { list-style: none; padding: 0; margin: 0; }
+        .policy-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #334155;
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+        .policy-list li:last-child { border: none; }
+        .who-compare {
+            display: flex;
+            justify-content: space-between;
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+
+        /* ── MOBILE RESPONSIVE ── */
+        @media (max-width: 768px) {
+
+            /* Header */
+            .header { padding: 15px; flex-direction: column; text-align: center; gap: 8px; }
+            .header h1 { font-size: 16px; }
+            .header p  { font-size: 11px; }
+            .header-icon { font-size: 28px; }
+
+            /* Cards */
+            .cards { padding: 15px; gap: 10px; }
+            .card  { min-width: 140px; padding: 15px; }
+            .card h2 { font-size: 32px; }
+            .card p  { font-size: 12px; }
+
+            /* Main layout */
+            .main { padding: 0 15px 15px; flex-direction: column; }
+            .map-container { min-width: unset; }
+            #map { height: 280px; }
+            .table-container { min-width: unset; }
+
+            /* Charts */
+            .charts { padding: 0 15px 15px; flex-direction: column; }
+            .chart-box { min-width: unset; padding: 15px; }
+            .chart-box h3 { font-size: 13px; }
+
+            /* Alert banner */
+            .alert-banner { padding: 10px 15px; font-size: 12px; }
+            .alert-icon { font-size: 18px; }
+            .alert-content h4 { font-size: 13px; }
+            .alert-content p  { font-size: 11px; }
+
+            /* WHO bar */
+            .who-bar { padding: 8px 15px; gap: 5px; }
+            .who-badge { padding: 3px 7px; font-size: 10px; }
+
+            /* Table */
+            table { font-size: 11px; }
+            th, td { padding: 7px 10px; }
+
+            /* Modal */
+            .modal-box { padding: 20px; width: 95%; }
+            .modal-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .modal-stat h3 { font-size: 22px; }
+            .modal-stat p  { font-size: 11px; }
+
+            /* Policy section */
+            .policy-list li { font-size: 12px; padding: 6px 0; }
+            .who-compare { font-size: 12px; padding: 10px 12px; }
+
+            /* Footer */
+            .footer { font-size: 11px; padding: 15px; }
+        }
+
+        @media (max-width: 480px) {
+            .header h1 { font-size: 14px; }
+            .cards { flex-direction: column; }
+            .card  { min-width: unset; width: 100%; }
+            .modal-grid { grid-template-columns: 1fr; }
+            #map { height: 220px; }
+            .who-bar { display: none; }
+        }
+
+        /* Smooth scrolling */
+        html { scroll-behavior: smooth; }
+
+        /* Better touch targets on mobile */
+        @media (hover: none) {
+            tr { cursor: pointer; }
+            .who-badge { padding: 6px 12px; }
+            .modal-close { width: 40px; height: 40px; font-size: 18px; }
+        }
+
+
+        /* Mobile Navigation */
+        .mobile-nav {
+            display: none;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: #1e293b;
+            border-top: 1px solid #334155;
+            padding: 8px 0;
+            z-index: 1000;
+            justify-content: space-around;
+        }
+        .mobile-nav a {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 10px;
+            gap: 3px;
+        }
+        .mobile-nav a span { font-size: 20px; }
+        .mobile-nav a.active { color: #0ea5e9; }
+
+        @media (max-width: 768px) {
+            .mobile-nav { display: flex; }
+            body { padding-bottom: 60px; }
+        }
+
+</style>
 </head>
 <body>
 
@@ -146,6 +563,27 @@
         <h1>Dhaka Air Quality Monitoring Dashboard</h1>
         <p>AI-Powered Carbon Emission Hotspot Detection | Real-time Data from Firebase</p>
     </div>
+</div>
+
+
+<!-- AQI Alert Banner -->
+<div id="alertBanner" class="alert-banner alert-moderate">
+    <div class="alert-icon" id="alertIcon">⏳</div>
+    <div class="alert-content">
+        <h4 id="alertTitle">Loading air quality data...</h4>
+        <p id="alertDesc">Fetching real-time data from Firebase</p>
+    </div>
+</div>
+
+<!-- WHO Reference Bar -->
+<div class="who-bar">
+    <span>WHO AQI Categories:</span>
+    <span class="who-badge" style="background:#16a34a;color:white">🟢 Good (0-50)</span>
+    <span class="who-badge" style="background:#d97706;color:white">🟡 Moderate (51-100)</span>
+    <span class="who-badge" style="background:#ea580c;color:white">🟠 Sensitive (101-150)</span>
+    <span class="who-badge" style="background:#dc2626;color:white">🔴 Unhealthy (151-200)</span>
+    <span class="who-badge" style="background:#7c3aed;color:white">🟣 Very Unhealthy (201-300)</span>
+    <span class="who-badge" style="background:#57534e;color:white">⚫ Hazardous (301+)</span>
 </div>
 
 <!-- Summary Cards -->
@@ -169,7 +607,7 @@
 </div>
 
 <!-- Map + Table -->
-<div class="main">
+<div class="main" id="map-section">
     <div class="map-container">
         <h3>🗺️ Emission Hotspot Map — Dhaka</h3>
         <div id="map"></div>
@@ -193,7 +631,7 @@
 </div>
 
 <!-- Charts -->
-<div class="charts">
+<div class="charts" id="charts-section">
     <div class="chart-box">
         <h3>📊 AQI by Area</h3>
         <canvas id="aqiChart"></canvas>
@@ -318,8 +756,11 @@ fetch("/api/areas")
             const riskClass = area.Risk_Zone === "High Risk" ? "badge-high" :
                               area.Risk_Zone === "Medium Risk" ? "badge-medium" : "badge-low";
             tbody.innerHTML += `
-                <tr>
-                    <td>${area.area}</td>
+                <tr onclick="openAreaModal(${JSON.stringify(area).replace(/"/g, '&quot;')})"
+                    style="cursor:pointer"
+                    onmouseover="this.style.background='#334155'"
+                    onmouseout="this.style.background=''">
+                    <td>📍 ${area.area}</td>
                     <td>${area.AQI}</td>
                     <td>${area.PM25}</td>
                     <td><span class="badge ${riskClass}">${area.Risk_Zone}</span></td>
@@ -514,6 +955,9 @@ fetch("/api/areas")
         areasData = areas;
         areas.sort((a, b) => b.AQI - a.AQI);
 
+        // Update AQI Alert Banner
+        updateAlertBanner(areas);
+
         // Trend Chart - CO and AQI
         const trendCtx = document.getElementById("trendChart").getContext("2d");
         new Chart(trendCtx, {
@@ -674,6 +1118,69 @@ function downloadPolicyReport() {
     URL.revokeObjectURL(url);
 }
 </script>
+
+
+<!-- Area Detail Modal -->
+<div class="modal-overlay" id="areaModal">
+    <div class="modal-box">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-header">
+            <h2 id="modalTitle">Area Name</h2>
+            <p id="modalSubtitle">Risk Zone | GPS Coordinates</p>
+        </div>
+
+        <div class="modal-grid">
+            <div class="modal-stat">
+                <h3 id="modalAQI" style="color:#dc2626">—</h3>
+                <p>Air Quality Index</p>
+            </div>
+            <div class="modal-stat">
+                <h3 id="modalPM25" style="color:#f97316">—</h3>
+                <p>PM2.5 (µg/m³)</p>
+            </div>
+            <div class="modal-stat">
+                <h3 id="modalPM10" style="color:#0ea5e9">—</h3>
+                <p>PM10 (µg/m³)</p>
+            </div>
+            <div class="modal-stat">
+                <h3 id="modalCO" style="color:#8b5cf6">—</h3>
+                <p>CO (ppm)</p>
+            </div>
+        </div>
+
+        <div class="modal-section" style="margin-bottom:20px">
+            <h4>📊 Pollutant Levels vs WHO Limits</h4>
+            <div id="modalBars"></div>
+        </div>
+
+        <div class="modal-section" style="margin-bottom:20px">
+            <h4>🏥 WHO Guideline Comparison</h4>
+            <div id="modalWHO"></div>
+        </div>
+
+        <div class="modal-section">
+            <h4>💡 Policy Recommendations</h4>
+            <ul class="policy-list" id="modalPolicy"></ul>
+        </div>
+    </div>
+</div>
+
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-nav">
+    <a href="#" onclick="scrollToSection('map-section')">
+        <span>🗺️</span>Map
+    </a>
+    <a href="#" onclick="scrollToSection('charts-section')">
+        <span>📊</span>Charts
+    </a>
+    <a href="#" onclick="scrollToSection('policy-section')">
+        <span>💡</span>Policy
+    </a>
+    <a href="#" onclick="scrollToSection('download-section')">
+        <span>📥</span>Download
+    </a>
+</nav>
 
 </body>
 </html>
